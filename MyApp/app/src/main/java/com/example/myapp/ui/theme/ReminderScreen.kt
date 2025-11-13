@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapp.data.Reminder
@@ -31,7 +34,8 @@ import java.util.*
 fun ReminderScreen(
     reminders: List<Reminder>,
     onAdd: (Reminder) -> Unit,
-    onDelete: (Reminder) -> Unit
+    onDelete: (Reminder) -> Unit,
+    onUpdate: (Reminder) -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -110,7 +114,7 @@ fun ReminderScreen(
                 Text("Adicionar Lembrete", fontWeight = FontWeight.Bold)
             }
 
-            Divider(
+            HorizontalDivider(
                 color = Color.White.copy(alpha = 0.3f),
                 thickness = 1.dp,
                 modifier = Modifier.padding(vertical = 8.dp)
@@ -122,7 +126,17 @@ fun ReminderScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(reminders) { reminder ->
-                    ReminderCard(reminder = reminder, onDelete = onDelete)
+                    ReminderCard(reminder = reminder, onDelete = onDelete, onToggle = { updatedReminder ->
+                        val newReminder = updatedReminder.copy(isEnabled = !updatedReminder.isEnabled)
+                        coroutineScope.launch {
+                            onUpdate(newReminder) // se estiver usando ViewModel/DAO
+                            if (newReminder.isEnabled) {
+                                NotificationUtils.scheduleNotification(context, newReminder.title, newReminder.hour, newReminder.minute)
+                            } else {
+                                NotificationUtils.cancelNotification(context, newReminder.id.toString())
+                            }
+                        }
+                    })
                 }
             }
         }
@@ -130,7 +144,11 @@ fun ReminderScreen(
 }
 
 @Composable
-fun ReminderCard(reminder: Reminder, onDelete: (Reminder) -> Unit) {
+fun ReminderCard(
+    reminder: Reminder,
+    onDelete: (Reminder) -> Unit,
+    onToggle: (Reminder) -> Unit
+) {
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.9f)),
@@ -140,18 +158,26 @@ fun ReminderCard(reminder: Reminder, onDelete: (Reminder) -> Unit) {
             .animateContentSize()
     ) {
         Row(
-            modifier = Modifier
-                .padding(16.dp),
+            modifier = Modifier.padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+
+            // ⬅️ AQUI: coluna com weight para não empurrar os ícones
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp)
+            ) {
                 Text(
                     text = reminder.title,
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
-                    color = Color(0xFF1E1E1E)
+                    color = Color(0xFF1E1E1E),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+
                 Text(
                     text = "⏰ %02d:%02d".format(reminder.hour, reminder.minute),
                     color = Color.Gray,
@@ -159,12 +185,25 @@ fun ReminderCard(reminder: Reminder, onDelete: (Reminder) -> Unit) {
                 )
             }
 
-            IconButton(onClick = { onDelete(reminder) }) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Excluir lembrete",
-                    tint = Color(0xFFE53935)
-                )
+            Row {
+                IconButton(onClick = { onToggle(reminder) }) {
+                    Icon(
+                        imageVector = if (reminder.isEnabled)
+                            Icons.Default.NotificationsActive
+                        else
+                            Icons.Default.NotificationsOff,
+                        contentDescription = "Ativar/Desativar",
+                        tint = if (reminder.isEnabled) Color(0xFF00C853) else Color.Gray
+                    )
+                }
+
+                IconButton(onClick = { onDelete(reminder) }) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Excluir lembrete",
+                        tint = Color(0xFFE53935)
+                    )
+                }
             }
         }
     }

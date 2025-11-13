@@ -13,4 +13,7 @@ interface ReminderDao {
 
     @Delete
     suspend fun delete(reminder: Reminder)
+
+    @Update
+    suspend fun update(reminder: Reminder)
 }
