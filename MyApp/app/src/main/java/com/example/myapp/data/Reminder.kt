@@ -9,5 +9,6 @@ data class Reminder(
     val title: String,
     val hour: Int,
     val minute: Int,
+    val daysOfWeek: List<Int>,
     val isEnabled: Boolean = true
 )

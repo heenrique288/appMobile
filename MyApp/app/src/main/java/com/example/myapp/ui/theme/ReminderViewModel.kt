@@ -11,24 +11,33 @@ import kotlinx.coroutines.launch
 
 class ReminderViewModel(private val repository: ReminderRepository) : ViewModel() {
 
+    // Flow contendo todos os lembretes
     val reminders = repository.reminders
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    // Inserção SEM retornar ID
     fun addReminder(reminder: Reminder) {
         viewModelScope.launch {
             repository.add(reminder)
         }
     }
 
-    fun deleteReminder(reminder: Reminder) {
-        viewModelScope.launch {
-            repository.delete(reminder)
-        }
+    // Inserção que retorna o ID do Room
+    suspend fun addReminderReturnId(reminder: Reminder): Long {
+        return repository.addReturnId(reminder)
     }
 
+    // Atualizar lembrete
     fun updateReminder(reminder: Reminder) {
         viewModelScope.launch {
             repository.update(reminder)
+        }
+    }
+
+    // Apagar lembrete
+    fun deleteReminder(reminder: Reminder) {
+        viewModelScope.launch {
+            repository.delete(reminder)
         }
     }
 }

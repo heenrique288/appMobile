@@ -33,6 +33,7 @@ import java.util.*
 @Composable
 fun ReminderScreen(
     reminders: List<Reminder>,
+    viewModel: ReminderViewModel,
     onAdd: (Reminder) -> Unit,
     onDelete: (Reminder) -> Unit,
     onUpdate: (Reminder) -> Unit
@@ -76,19 +77,69 @@ fun ReminderScreen(
                 style = MaterialTheme.typography.bodyMedium.copy(color = Color.White.copy(alpha = 0.8f))
             )
 
+            // Estado do título e erro
+            var title by remember { mutableStateOf(TextFieldValue("")) }
+            var titleError by remember { mutableStateOf<String?>(null) }
+
+            val maxChars = 30
+
+            // Validar a cada alteração
+            fun validateTitle(text: String) {
+                titleError = when {
+                    text.isBlank() -> "O título não pode ser vazio"
+                    text.length > maxChars -> "Máximo de $maxChars caracteres"
+                    else -> null
+                }
+            }
+
             // 🧾 Campo de título
             TextField(
                 value = title,
-                onValueChange = { title = it },
+                onValueChange = {
+                    if (it.text.length <= maxChars) {
+                        title = it
+                    }
+                    validateTitle(it.text)
+                },
                 label = { Text("Título do lembrete") },
                 singleLine = true,
+                isError = titleError != null,
+                supportingText = {
+                    if (titleError != null) {
+                        Text(text = titleError!!, color = Color.Red)
+                    } else {
+                        Text("${title.text.length} / $maxChars")
+                    }
+                },
                 colors = TextFieldDefaults.colors(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent
                 ),
-                        modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth()
             )
+            val selectedDays = remember { mutableStateListOf<Int>() }
 
+            Row(horizontalArrangement = Arrangement.SpaceBetween) {
+                val days = listOf("D", "S", "T", "Q", "Q", "S", "S")
+
+                days.forEachIndexed { index, label ->
+                    val selected = selectedDays.contains(index)
+
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            if (selected) selectedDays.remove(index)
+                            else selectedDays.add(index)
+                        },
+                        label = { Text(
+                            label,
+                            color = if (selected) Color.White else Color(0xFFEEEEEE)
+                        ) }
+                    )
+                }
+            }
+
+            val isButtonEnabled = titleError == null && title.text.isNotBlank()
             // ⏰ Botão para escolher hora e salvar lembrete
             Button(
                 onClick = {
@@ -96,20 +147,35 @@ fun ReminderScreen(
                     TimePickerDialog(
                         context,
                         { _, hour, minute ->
-                            val reminder = Reminder(title = title.text, hour = hour, minute = minute)
+                            val newReminder = Reminder(
+                                title = title.text.trim(),
+                                hour = hour,
+                                minute = minute,
+                                daysOfWeek = selectedDays.toList()
+                            )
+
                             coroutineScope.launch {
-                                onAdd(reminder)
-                                NotificationUtils.scheduleNotification(context, title.text, hour, minute)
+                                val generatedId = viewModel.addReminderReturnId(newReminder)
+                                val reminderWithId = newReminder.copy(id = generatedId.toInt())
+
+                                NotificationUtils.scheduleNotification(context, reminderWithId)
+                                onAdd(reminderWithId)
                             }
+
                             title = TextFieldValue("")
+                            titleError = null
                         },
                         cal.get(Calendar.HOUR_OF_DAY),
                         cal.get(Calendar.MINUTE),
                         true
                     ).show()
                 },
+                enabled = isButtonEnabled,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676))
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isButtonEnabled) Color(0xFF00E676) else Color(0xFF8BC34A),
+                    disabledContainerColor = Color(0xFF8BC34A).copy(alpha = 0.4f)
+                )
             ) {
                 Text("Adicionar Lembrete", fontWeight = FontWeight.Bold)
             }
@@ -131,9 +197,9 @@ fun ReminderScreen(
                         coroutineScope.launch {
                             onUpdate(newReminder) // se estiver usando ViewModel/DAO
                             if (newReminder.isEnabled) {
-                                NotificationUtils.scheduleNotification(context, newReminder.title, newReminder.hour, newReminder.minute)
+                                NotificationUtils.scheduleNotification(context, newReminder)
                             } else {
-                                NotificationUtils.cancelNotification(context, newReminder.id.toString())
+                                NotificationUtils.cancelNotification(context, updatedReminder)
                             }
                         }
                     })
@@ -149,6 +215,7 @@ fun ReminderCard(
     onDelete: (Reminder) -> Unit,
     onToggle: (Reminder) -> Unit
 ) {
+    val context = LocalContext.current
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.9f)),
@@ -183,6 +250,14 @@ fun ReminderCard(
                     color = Color.Gray,
                     fontSize = 14.sp
                 )
+
+                val daysMap = listOf("Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb")
+                Text(
+                    text = reminder.daysOfWeek.joinToString(" - ") { daysMap[it] },
+                    color = Color.DarkGray,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
 
             Row {
@@ -197,7 +272,12 @@ fun ReminderCard(
                     )
                 }
 
-                IconButton(onClick = { onDelete(reminder) }) {
+                IconButton(onClick = {
+                    // cancela os alarms associados a esse reminder (usa id correto vindo do DB)
+                    NotificationUtils.cancelNotification(context, reminder)
+                    // então apaga do banco
+                    onDelete(reminder)
+                }) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Excluir lembrete",

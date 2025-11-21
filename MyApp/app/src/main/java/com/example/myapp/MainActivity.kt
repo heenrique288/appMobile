@@ -16,6 +16,10 @@ import com.example.myapp.ui.theme.ReminderScreen
 import com.example.myapp.ui.theme.ReminderViewModel
 import androidx.compose.runtime.collectAsState
 import com.example.myapp.ui.theme.ReminderViewModelFactory
+import androidx.lifecycle.lifecycleScope
+import com.example.myapp.data.Reminder
+import com.example.myapp.notification.NotificationUtils
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -37,10 +41,27 @@ class MainActivity : ComponentActivity() {
 
             ReminderScreen(
                 reminders = reminders.value,
-                onAdd = { viewModel.addReminder(it) },
+                viewModel = viewModel,  // <-- AGORA ELE EXISTE NO COMPOSABLE
+                onAdd = {},
                 onDelete = { viewModel.deleteReminder(it) },
-                onUpdate = { viewModel.updateReminder(it) } // 👈 incluído para ativar/desativar lembrete
+                onUpdate = { viewModel.updateReminder(it) }
             )
+        }
+        lifecycleScope.launch {
+            viewModel.reminders.collect { list ->
+                // cancelar possíveis alarms antigos com id = 0
+                val fakeZeroReminder =
+                    Reminder(id = 0, title = "", hour = 0, minute = 0, daysOfWeek = (0..6).toList())
+                NotificationUtils.cancelNotification(applicationContext, fakeZeroReminder)
+
+                // reagendar todos os reminders ativos com id correto
+                list.forEach { r ->
+                    if (r.isEnabled) {
+                        NotificationUtils.cancelNotification(applicationContext, r) // evita duplicados
+                        NotificationUtils.scheduleNotification(applicationContext, r)
+                    }
+                }
+            }
         }
     }
 

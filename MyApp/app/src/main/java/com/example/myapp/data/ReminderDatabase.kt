@@ -3,8 +3,10 @@ package com.example.myapp.data
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 
-@Database(entities = [Reminder::class], version = 2)
+@Database(entities = [Reminder::class], version = 3)
+@TypeConverters(ReminderConverters::class)
 abstract class ReminderDatabase : RoomDatabase() {
 
     abstract fun reminderDao(): ReminderDao
