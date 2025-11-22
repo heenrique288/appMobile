@@ -41,9 +41,29 @@ fun ReminderScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    // --- ESTADOS PRINCIPAIS ---
     var title by remember { mutableStateOf(TextFieldValue("")) }
+    val selectedDays = remember { mutableStateListOf<Int>() }
+    var titleError by remember { mutableStateOf<String?>(null) }
 
-    // 🌈 Fundo gradiente suave
+    val maxChars = 30
+
+    fun validateTitle(text: String) {
+        titleError = when {
+            text.isBlank() -> "O título não pode ser vazio"
+            text.length > maxChars -> "Máximo de $maxChars caracteres"
+            else -> null
+        }
+    }
+
+    // botão só habilita se:
+    // 1) título válido
+    // 2) ao menos 1 dia selecionado
+    val isButtonEnabled = titleError == null &&
+            title.text.isNotBlank() &&
+            selectedDays.isNotEmpty()
+
+    // 🌈 Fundo gradiente
     val gradient = Brush.verticalGradient(
         listOf(
             Color(0xFF6A11CB),
@@ -77,28 +97,11 @@ fun ReminderScreen(
                 style = MaterialTheme.typography.bodyMedium.copy(color = Color.White.copy(alpha = 0.8f))
             )
 
-            // Estado do título e erro
-            var title by remember { mutableStateOf(TextFieldValue("")) }
-            var titleError by remember { mutableStateOf<String?>(null) }
-
-            val maxChars = 30
-
-            // Validar a cada alteração
-            fun validateTitle(text: String) {
-                titleError = when {
-                    text.isBlank() -> "O título não pode ser vazio"
-                    text.length > maxChars -> "Máximo de $maxChars caracteres"
-                    else -> null
-                }
-            }
-
-            // 🧾 Campo de título
+            // 🧾 CAMPO DE TÍTULO
             TextField(
                 value = title,
                 onValueChange = {
-                    if (it.text.length <= maxChars) {
-                        title = it
-                    }
+                    if (it.text.length <= maxChars) title = it
                     validateTitle(it.text)
                 },
                 label = { Text("Título do lembrete") },
@@ -106,7 +109,7 @@ fun ReminderScreen(
                 isError = titleError != null,
                 supportingText = {
                     if (titleError != null) {
-                        Text(text = titleError!!, color = Color.Red)
+                        Text(titleError!!, color = Color.Red)
                     } else {
                         Text("${title.text.length} / $maxChars")
                     }
@@ -117,8 +120,8 @@ fun ReminderScreen(
                 ),
                 modifier = Modifier.fillMaxWidth()
             )
-            val selectedDays = remember { mutableStateListOf<Int>() }
 
+            // CHIP DIAS DA SEMANA
             Row(horizontalArrangement = Arrangement.SpaceBetween) {
                 val days = listOf("D", "S", "T", "Q", "Q", "S", "S")
 
@@ -131,19 +134,21 @@ fun ReminderScreen(
                             if (selected) selectedDays.remove(index)
                             else selectedDays.add(index)
                         },
-                        label = { Text(
-                            label,
-                            color = if (selected) Color.White else Color(0xFFEEEEEE)
-                        ) }
+                        label = {
+                            Text(
+                                label,
+                                color = if (selected) Color.White else Color(0xFFEEEEEE)
+                            )
+                        }
                     )
                 }
             }
 
-            val isButtonEnabled = titleError == null && title.text.isNotBlank()
-            // ⏰ Botão para escolher hora e salvar lembrete
+            // ⏰ BOTÃO ADICIONAR LEMBRETE
             Button(
                 onClick = {
                     val cal = Calendar.getInstance()
+
                     TimePickerDialog(
                         context,
                         { _, hour, minute ->
@@ -162,8 +167,10 @@ fun ReminderScreen(
                                 onAdd(reminderWithId)
                             }
 
+                            // limpar campos
                             title = TextFieldValue("")
                             titleError = null
+                            selectedDays.clear()
                         },
                         cal.get(Calendar.HOUR_OF_DAY),
                         cal.get(Calendar.MINUTE),
@@ -174,7 +181,7 @@ fun ReminderScreen(
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (isButtonEnabled) Color(0xFF00E676) else Color(0xFF8BC34A),
-                    disabledContainerColor = Color(0xFF8BC34A).copy(alpha = 0.4f)
+                    disabledContainerColor = Color(0xFF8BC34A).copy(alpha = 0.3f)
                 )
             ) {
                 Text("Adicionar Lembrete", fontWeight = FontWeight.Bold)
@@ -186,23 +193,26 @@ fun ReminderScreen(
                 modifier = Modifier.padding(vertical = 8.dp)
             )
 
-            // 🗂️ Lista de lembretes
+            // 🗂️ LISTA DE LEMBRETES
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(reminders) { reminder ->
-                    ReminderCard(reminder = reminder, onDelete = onDelete, onToggle = { updatedReminder ->
-                        val newReminder = updatedReminder.copy(isEnabled = !updatedReminder.isEnabled)
-                        coroutineScope.launch {
-                            onUpdate(newReminder) // se estiver usando ViewModel/DAO
-                            if (newReminder.isEnabled) {
-                                NotificationUtils.scheduleNotification(context, newReminder)
-                            } else {
-                                NotificationUtils.cancelNotification(context, updatedReminder)
+                    ReminderCard(
+                        reminder = reminder,
+                        onDelete = onDelete,
+                        onToggle = { updated ->
+                            val toggled = updated.copy(isEnabled = !updated.isEnabled)
+                            coroutineScope.launch {
+                                onUpdate(toggled)
+                                if (toggled.isEnabled)
+                                    NotificationUtils.scheduleNotification(context, toggled)
+                                else
+                                    NotificationUtils.cancelNotification(context, updated)
                             }
                         }
-                    })
+                    )
                 }
             }
         }
@@ -230,7 +240,6 @@ fun ReminderCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
 
-            // ⬅️ AQUI: coluna com weight para não empurrar os ícones
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -273,9 +282,7 @@ fun ReminderCard(
                 }
 
                 IconButton(onClick = {
-                    // cancela os alarms associados a esse reminder (usa id correto vindo do DB)
                     NotificationUtils.cancelNotification(context, reminder)
-                    // então apaga do banco
                     onDelete(reminder)
                 }) {
                     Icon(

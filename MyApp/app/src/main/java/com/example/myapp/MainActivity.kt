@@ -8,6 +8,8 @@ import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.myapp.data.ReminderDatabase
@@ -15,10 +17,16 @@ import com.example.myapp.data.ReminderRepository
 import com.example.myapp.ui.theme.ReminderScreen
 import com.example.myapp.ui.theme.ReminderViewModel
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Modifier
 import com.example.myapp.ui.theme.ReminderViewModelFactory
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.example.myapp.data.Reminder
 import com.example.myapp.notification.NotificationUtils
+import com.example.myapp.ui.navigation.BottomBar
+import com.example.myapp.ui.navigation.Screen
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -38,14 +46,38 @@ class MainActivity : ComponentActivity() {
         // ✅ Interface com Compose
         setContent {
             val reminders = viewModel.reminders.collectAsState(initial = emptyList())
+            val navController = rememberNavController()
 
-            ReminderScreen(
-                reminders = reminders.value,
-                viewModel = viewModel,  // <-- AGORA ELE EXISTE NO COMPOSABLE
-                onAdd = {},
-                onDelete = { viewModel.deleteReminder(it) },
-                onUpdate = { viewModel.updateReminder(it) }
-            )
+            Scaffold(
+                bottomBar = { BottomBar(navController) }
+            ) { innerPadding ->
+
+                NavHost(
+                    navController = navController,
+                    startDestination = Screen.Reminders.route,
+                    modifier = Modifier
+                        .padding(bottom = innerPadding.calculateBottomPadding()) // apenas o padding inferior
+                ) {
+
+                    composable(Screen.Reminders.route) {
+                        ReminderScreen(
+                            reminders = reminders.value,
+                            viewModel = viewModel,
+                            onAdd = {},
+                            onDelete = { viewModel.deleteReminder(it) },
+                            onUpdate = { viewModel.updateReminder(it) }
+                        )
+                    }
+
+                    composable(Screen.Timer.route) {
+                        TimerScreen()
+                    }
+
+                    composable(Screen.Chronometer.route) {
+                        ChronometerScreen()
+                    }
+                }
+            }
         }
         lifecycleScope.launch {
             viewModel.reminders.collect { list ->
