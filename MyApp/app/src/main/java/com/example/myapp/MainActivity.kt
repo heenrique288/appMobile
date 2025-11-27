@@ -24,16 +24,19 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.myapp.data.Reminder
+import com.example.myapp.notification.NotificationHelper
 import com.example.myapp.notification.NotificationUtils
+import com.example.myapp.ui.chronometer.ChronometerScreen
 import com.example.myapp.ui.navigation.BottomBar
 import com.example.myapp.ui.navigation.Screen
+import com.example.myapp.ui.timer.TimerScreen
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
-
+        NotificationHelper.createChannel(this)
         createNotificationChannel()
         requestNotificationPermission()
 
